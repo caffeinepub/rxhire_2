@@ -8,6 +8,8 @@ actor {
   // ---- Types ----
   public type Role = { #Pharmacist; #Employer };
 
+  public type ApprovalStatus = { #Pending; #Approved; #Rejected };
+
   public type User = {
     id: Nat;
     name: Text;
@@ -52,14 +54,27 @@ actor {
     appliedAt: Int;
   };
 
+  public type EmployerWithStatus = {
+    userId: Nat;
+    name: Text;
+    email: Text;
+    companyName: Text;
+    mobileNumber: Text;
+    location: Text;
+    state: Text;
+    approvalStatus: ApprovalStatus;
+  };
+
   // ---- Storage ----
   var users = Map.empty<Nat, User>();
   var emailIndex = Map.empty<Text, Nat>();
   var pharmacistProfiles = Map.empty<Nat, PharmacistProfile>();
   var employerProfiles = Map.empty<Nat, EmployerProfile>();
+  var employerApprovalStatus = Map.empty<Nat, ApprovalStatus>();
   var jobs = Map.empty<Nat, Job>();
   var applications = Map.empty<Nat, Application>();
   var sessions = Map.empty<Text, Nat>();
+  var adminSessions = Map.empty<Text, Bool>();
   var nextUserId : Nat = 1;
   var nextJobId : Nat = 1;
   var nextAppId : Nat = 1;
@@ -71,9 +86,8 @@ actor {
     userId.toText() # "_" # ts.toText()
   };
 
-  func upsertNat(m: Map.Map<Nat, User>, k: Nat, v: User) {
-    m.remove(k);
-    m.add(k, v);
+  func makeAdminToken(ts: Int): Text {
+    "admin_" # ts.toText()
   };
 
   func upsertPharmacist(m: Map.Map<Nat, PharmacistProfile>, k: Nat, v: PharmacistProfile) {
@@ -86,6 +100,13 @@ actor {
     m.add(k, v);
   };
 
+  func getApprovalStatus(userId: Nat): ApprovalStatus {
+    switch (employerApprovalStatus.get(userId)) {
+      case (?s) { s };
+      case null { #Pending };
+    }
+  };
+
   // ---- Auth ----
   public func signup(name: Text, email: Text, password: Text, role: Role): async { #ok: { token: Text; userId: Nat; role: Role }; #err: Text } {
     switch (emailIndex.get(email)) {
@@ -96,6 +117,11 @@ actor {
         let user: User = { id; name; email; passwordHash = hashPw(password); role };
         users.add(id, user);
         emailIndex.add(email, id);
+        // Set employer as Pending on signup
+        switch (role) {
+          case (#Employer) { employerApprovalStatus.add(id, #Pending); };
+          case (_) {};
+        };
         let token = makeToken(id, Time.now());
         sessions.add(token, id);
         #ok({ token; userId = id; role })
@@ -113,6 +139,17 @@ actor {
             if (user.passwordHash != hashPw(password)) {
               #err("Invalid password")
             } else {
+              // Check employer approval
+              switch (user.role) {
+                case (#Employer) {
+                  switch (getApprovalStatus(userId)) {
+                    case (#Pending) { return #err("Your account is pending admin approval. Please wait.") };
+                    case (#Rejected) { return #err("Your account has been rejected by admin. Contact support.") };
+                    case (#Approved) {};
+                  };
+                };
+                case (_) {};
+              };
               let token = makeToken(userId, Time.now());
               sessions.add(token, userId);
               #ok({ token; userId; role = user.role; name = user.name })
@@ -125,6 +162,71 @@ actor {
 
   public func logout(token: Text): async () {
     sessions.remove(token);
+  };
+
+  // ---- Admin Auth ----
+  public func adminLogin(email: Text, password: Text): async { #ok: { token: Text }; #err: Text } {
+    if (email == "admin@rxhire.com" and password == "admin123") {
+      let token = makeAdminToken(Time.now());
+      adminSessions.add(token, true);
+      #ok({ token })
+    } else {
+      #err("Invalid admin credentials")
+    }
+  };
+
+  func isAdmin(token: Text): Bool {
+    switch (adminSessions.get(token)) {
+      case (?_) { true };
+      case null { false };
+    }
+  };
+
+  // ---- Admin Functions ----
+  public func getAllEmployers(adminToken: Text): async { #ok: [EmployerWithStatus]; #err: Text } {
+    if (not isAdmin(adminToken)) { return #err("Unauthorized") };
+    let result = users.values().toArray()
+      .filter(func(u: User): Bool {
+        switch (u.role) { case (#Employer) { true }; case (_) { false }; }
+      })
+      .map(func(u: User): EmployerWithStatus {
+        let profile = employerProfiles.get(u.id);
+        let status = getApprovalStatus(u.id);
+        switch (profile) {
+          case (?p) {
+            { userId = u.id; name = u.name; email = u.email;
+              companyName = p.companyName; mobileNumber = p.mobileNumber;
+              location = p.location; state = p.state;
+              approvalStatus = status; }
+          };
+          case null {
+            { userId = u.id; name = u.name; email = u.email;
+              companyName = ""; mobileNumber = ""; location = ""; state = "";
+              approvalStatus = status; }
+          };
+        }
+      });
+    #ok(result)
+  };
+
+  public func approveEmployer(adminToken: Text, employerId: Nat): async { #ok; #err: Text } {
+    if (not isAdmin(adminToken)) { return #err("Unauthorized") };
+    switch (employerApprovalStatus.get(employerId)) {
+      case (?_) { employerApprovalStatus.remove(employerId); };
+      case null {};
+    };
+    employerApprovalStatus.add(employerId, #Approved);
+    #ok
+  };
+
+  public func rejectEmployer(adminToken: Text, employerId: Nat): async { #ok; #err: Text } {
+    if (not isAdmin(adminToken)) { return #err("Unauthorized") };
+    switch (employerApprovalStatus.get(employerId)) {
+      case (?_) { employerApprovalStatus.remove(employerId); };
+      case null {};
+    };
+    employerApprovalStatus.add(employerId, #Rejected);
+    #ok
   };
 
   // ---- Pharmacist Profile ----

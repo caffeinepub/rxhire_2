@@ -9,6 +9,7 @@ export interface None {
 export type Option<T> = Some<T> | None;
 
 export type Role = { Pharmacist: null } | { Employer: null };
+export type ApprovalStatus = { Pending: null } | { Approved: null } | { Rejected: null };
 
 export interface PharmacistProfile {
     userId: bigint;
@@ -27,6 +28,17 @@ export interface EmployerProfile {
     mobileNumber: string;
     location: string;
     state: string;
+}
+
+export interface EmployerWithStatus {
+    userId: bigint;
+    name: string;
+    email: string;
+    companyName: string;
+    mobileNumber: string;
+    location: string;
+    state: string;
+    approvalStatus: ApprovalStatus;
 }
 
 export interface Job {
@@ -55,6 +67,10 @@ export interface backendInterface {
         { ok: { token: string; userId: bigint; role: Role; name: string } } | { err: string }
     >;
     logout(token: string): Promise<void>;
+    adminLogin(email: string, password: string): Promise<{ ok: { token: string } } | { err: string }>;
+    getAllEmployers(adminToken: string): Promise<{ ok: EmployerWithStatus[] } | { err: string }>;
+    approveEmployer(adminToken: string, employerId: bigint): Promise<{ ok: null } | { err: string }>;
+    rejectEmployer(adminToken: string, employerId: bigint): Promise<{ ok: null } | { err: string }>;
     savePharmacistProfile(
         token: string, name: string, mobileNumber: string,
         pciNumber: string, state: string, licenseStatus: string,

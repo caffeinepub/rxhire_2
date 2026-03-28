@@ -38,6 +38,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import AdminPanel from "./AdminPanel";
 import type {
   Application,
   EmployerProfile,
@@ -2152,6 +2153,10 @@ export default function App() {
   const [authView, setAuthView] = useState<AuthView>("login");
   const { actor, isFetching } = useActor();
 
+  // Admin route check
+  const [isAdmin] = useState(() => window.location.hash === "#admin");
+
+  // Admin route: visit /#admin to access admin panel
   const handleLogin = (s: Session) => setSession(s);
   const handleSignup = (s: Session) => setSession(s);
 
@@ -2181,6 +2186,8 @@ export default function App() {
     clearSession();
     setSession(null);
   };
+
+  if (isAdmin) return <AdminPanel />;
 
   if (!session) {
     if (authView === "login") {
@@ -2214,6 +2221,8 @@ export default function App() {
       </div>
     );
   }
+
+  if (isAdmin) return <AdminPanel />;
 
   return (
     <>
