@@ -428,4 +428,9 @@ actor {
   public query func getAllPharmacists(): async [PharmacistProfile] {
     pharmacistProfiles.values().toArray()
   };
+
+  // Blob storage certificate for file uploads
+  public shared func _caffeineStorageCreateCertificate(blobHash : Text) : async { method : Text; blob_hash : Text } {
+    { method = "upload"; blob_hash = blobHash }
+  };
 }

@@ -76,6 +76,34 @@ function clearSession() {
   localStorage.removeItem(SESSION_KEY);
 }
 
+function isCanisterStopped(err: any): boolean {
+  const msg = err?.message || String(err);
+  return (
+    msg.includes("IC0508") ||
+    msg.includes("canister is stopped") ||
+    msg.includes("Reject code: 5")
+  );
+}
+
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  retries = 3,
+  delayMs = 3000,
+): Promise<T> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fn();
+    } catch (err: any) {
+      if (isCanisterStopped(err) && i < retries - 1) {
+        await new Promise((r) => setTimeout(r, delayMs));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error("Max retries exceeded");
+}
+
 const INDIAN_STATES = [
   "Andhra Pradesh",
   "Arunachal Pradesh",
@@ -183,7 +211,9 @@ function LoginPage({
     setLoading(true);
     setError("");
     try {
-      const result = await actor.login(email, password);
+      const result = (await withRetry(() => actor!.login(email, password))) as
+        | { ok: { token: string; userId: bigint; role: any; name: string } }
+        | { err: string };
       if ("err" in result) {
         setError(result.err);
       } else {
@@ -199,7 +229,11 @@ function LoginPage({
         onLogin(session);
       }
     } catch (err: any) {
-      setError(err?.message || "Login failed");
+      if (isCanisterStopped(err)) {
+        setError("Server is starting up. Please try again in a moment.");
+      } else {
+        setError(err?.message || "Login failed");
+      }
     } finally {
       setLoading(false);
     }
@@ -301,7 +335,11 @@ function SignupPage({
     try {
       const backendRole =
         role === "Pharmacist" ? { Pharmacist: null } : { Employer: null };
-      const result = await actor.signup(name, email, password, backendRole);
+      const result = (await withRetry(() =>
+        actor!.signup(name, email, password, backendRole),
+      )) as
+        | { ok: { token: string; userId: bigint; role: any } }
+        | { err: string };
       if ("err" in result) {
         setError(result.err);
       } else {
@@ -316,7 +354,11 @@ function SignupPage({
         onSignup(session);
       }
     } catch (err: any) {
-      setError(err?.message || "Signup failed");
+      if (isCanisterStopped(err)) {
+        setError("Server is starting up. Please wait a moment and try again.");
+      } else {
+        setError(err?.message || "Signup failed");
+      }
     } finally {
       setLoading(false);
     }
@@ -2160,22 +2202,18 @@ export default function App() {
   const handleLogin = (s: Session) => setSession(s);
   const handleSignup = (s: Session) => setSession(s);
 
-  // Keep-alive: ping backend every 25s to prevent canister sleeping
+  // Keep-alive: ping backend every 10s to prevent canister sleeping (uses getAllJobs, no auth required)
   useEffect(() => {
-    if (!actor || !session) return;
+    if (!actor) return;
     const ping = () => {
       try {
-        if (session.role === "Pharmacist") {
-          (actor as any).getMyApplications(session.token).catch(() => {});
-        } else {
-          (actor as any).getEmployerApplications(session.token).catch(() => {});
-        }
+        (actor as any).getAllJobs().catch(() => {});
       } catch {}
     };
     ping();
-    const interval = setInterval(ping, 25000);
+    const interval = setInterval(ping, 5000);
     return () => clearInterval(interval);
-  }, [actor, session]);
+  }, [actor]);
 
   const handleLogout = async () => {
     if (actor && session) {

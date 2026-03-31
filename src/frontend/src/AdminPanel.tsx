@@ -34,6 +34,19 @@ type EmployerFilter = "All" | "Pending" | "Approved" | "Rejected";
 
 export default function AdminPanel() {
   const { actor } = useActor();
+
+  // Keep-alive: ping backend every 10s to prevent canister sleeping
+  useEffect(() => {
+    if (!actor) return;
+    const ping = () => {
+      try {
+        (actor as any).getAllJobs().catch(() => {});
+      } catch {}
+    };
+    ping();
+    const interval = setInterval(ping, 10000);
+    return () => clearInterval(interval);
+  }, [actor]);
   const [adminToken, setAdminToken] = useState<string | null>(() =>
     localStorage.getItem(ADMIN_SESSION_KEY),
   );
@@ -93,9 +106,12 @@ export default function AdminPanel() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!actor) return;
+    if (!actor) {
+      toast.error("Connecting to server, please try again in a moment");
+      return;
+    }
     setLoading(true);
-    try {
+    const attemptLogin = async (): Promise<void> => {
       const res = await (actor as any).adminLogin(email, password);
       if ("ok" in res) {
         localStorage.setItem(ADMIN_SESSION_KEY, res.ok.token);
@@ -104,8 +120,27 @@ export default function AdminPanel() {
       } else {
         toast.error(res.err);
       }
-    } catch {
-      toast.error("Login failed");
+    };
+    try {
+      await attemptLogin();
+    } catch (err: any) {
+      const msg = err?.message || String(err);
+      const isCanisterStopped =
+        msg.includes("IC0508") ||
+        msg.includes("canister is stopped") ||
+        msg.includes("canister not found");
+      if (isCanisterStopped) {
+        toast.info("Server is starting up, retrying in 2 seconds…");
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        try {
+          await attemptLogin();
+        } catch (retryErr: any) {
+          const retryMsg = retryErr?.message || String(retryErr);
+          toast.error(`Login failed: ${retryMsg}`);
+        }
+      } else {
+        toast.error(`Login failed: ${msg}`);
+      }
     } finally {
       setLoading(false);
     }
@@ -117,6 +152,7 @@ export default function AdminPanel() {
     setEmployers([]);
     setPharmacists([]);
     setJobs([]);
+    window.location.hash = "#admin";
   };
 
   const handleApprove = async (employerId: bigint) => {

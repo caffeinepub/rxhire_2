@@ -5,6 +5,7 @@ import type { Principal } from "@icp-sdk/core/principal";
 import { idlFactory, type _SERVICE } from "./declarations/backend.did";
 
 export type Role = { Pharmacist: null } | { Employer: null };
+export type ApprovalStatus = { Pending: null } | { Approved: null } | { Rejected: null };
 
 export interface PharmacistProfile {
   userId: bigint; name: string; mobileNumber: string;
@@ -14,6 +15,12 @@ export interface PharmacistProfile {
 export interface EmployerProfile {
   userId: bigint; companyName: string; mobileNumber: string;
   location: string; state: string;
+}
+export interface EmployerWithStatus {
+  userId: bigint; name: string; email: string;
+  companyName: string; mobileNumber: string;
+  location: string; state: string;
+  approvalStatus: ApprovalStatus;
 }
 export interface Job {
   id: bigint; employerId: bigint; title: string;
@@ -60,6 +67,10 @@ export interface backendInterface {
   signup(name: string, email: string, password: string, role: Role): Promise<{ ok: { token: string; userId: bigint; role: Role } } | { err: string }>;
   login(email: string, password: string): Promise<{ ok: { token: string; userId: bigint; role: Role; name: string } } | { err: string }>;
   logout(token: string): Promise<void>;
+  adminLogin(email: string, password: string): Promise<{ ok: { token: string } } | { err: string }>;
+  getAllEmployers(adminToken: string): Promise<{ ok: EmployerWithStatus[] } | { err: string }>;
+  approveEmployer(adminToken: string, employerId: bigint): Promise<{ ok: null } | { err: string }>;
+  rejectEmployer(adminToken: string, employerId: bigint): Promise<{ ok: null } | { err: string }>;
   savePharmacistProfile(token: string, name: string, mobileNumber: string, pciNumber: string, state: string, licenseStatus: string, companyName: string, resumeFileId: string): Promise<{ ok: null } | { err: string }>;
   getPharmacistProfile(token: string): Promise<{ ok: PharmacistProfile } | { err: string }>;
   saveEmployerProfile(token: string, companyName: string, mobileNumber: string, location: string, state: string): Promise<{ ok: null } | { err: string }>;
@@ -97,6 +108,18 @@ export class Backend implements backendInterface {
   }
   async logout(token: string) {
     return this.actor.logout(token);
+  }
+  async adminLogin(email: string, password: string) {
+    return (this.actor as any).adminLogin(email, password);
+  }
+  async getAllEmployers(adminToken: string) {
+    return (this.actor as any).getAllEmployers(adminToken);
+  }
+  async approveEmployer(adminToken: string, employerId: bigint) {
+    return (this.actor as any).approveEmployer(adminToken, employerId);
+  }
+  async rejectEmployer(adminToken: string, employerId: bigint) {
+    return (this.actor as any).rejectEmployer(adminToken, employerId);
   }
   async savePharmacistProfile(token: string, name: string, mobileNumber: string, pciNumber: string, state: string, licenseStatus: string, companyName: string, resumeFileId: string) {
     return this.actor.savePharmacistProfile(token, name, mobileNumber, pciNumber, state, licenseStatus, companyName, resumeFileId);
