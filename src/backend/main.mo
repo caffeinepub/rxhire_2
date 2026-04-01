@@ -79,6 +79,11 @@ actor {
   var nextJobId : Nat = 1;
   var nextAppId : Nat = 1;
 
+  // ---- Deleted Records (Soft-delete archive) ----
+  var deletedEmployers = Map.empty<Nat, EmployerWithStatus>();
+  var deletedPharmacists = Map.empty<Nat, PharmacistProfile>();
+  var deletedJobs = Map.empty<Nat, Job>();
+
   // ---- Helpers ----
   func hashPw(pw: Text): Text { pw # "_rxhire_2026" };
 
@@ -117,7 +122,6 @@ actor {
         let user: User = { id; name; email; passwordHash = hashPw(password); role };
         users.add(id, user);
         emailIndex.add(email, id);
-        // Set employer as Pending on signup
         switch (role) {
           case (#Employer) { employerApprovalStatus.add(id, #Pending); };
           case (_) {};
@@ -139,7 +143,6 @@ actor {
             if (user.passwordHash != hashPw(password)) {
               #err("Invalid password")
             } else {
-              // Check employer approval
               switch (user.role) {
                 case (#Employer) {
                   switch (getApprovalStatus(userId)) {
@@ -229,17 +232,36 @@ actor {
     #ok
   };
 
-
   public func adminDeleteEmployer(adminToken: Text, employerId: Nat): async { #ok; #err: Text } {
     if (not isAdmin(adminToken)) { return #err("Unauthorized") };
+    // Snapshot to deleted archive before removing
+    switch (users.get(employerId)) {
+      case (?u) {
+        let profile = employerProfiles.get(employerId);
+        let status = getApprovalStatus(employerId);
+        let snapshot: EmployerWithStatus = switch (profile) {
+          case (?p) { { userId = u.id; name = u.name; email = u.email;
+            companyName = p.companyName; mobileNumber = p.mobileNumber;
+            location = p.location; state = p.state; approvalStatus = status; } };
+          case null { { userId = u.id; name = u.name; email = u.email;
+            companyName = ""; mobileNumber = ""; location = ""; state = "";
+            approvalStatus = status; } };
+        };
+        deletedEmployers.remove(employerId);
+        deletedEmployers.add(employerId, snapshot);
+      };
+      case null {};
+    };
     users.remove(employerId);
     employerProfiles.remove(employerId);
     employerApprovalStatus.remove(employerId);
     // Remove jobs posted by this employer
     let jobsToDelete = jobs.values().toArray().filter(func(j: Job): Bool { j.employerId == employerId });
     for (j in jobsToDelete.vals()) {
+      // Snapshot job to deleted archive
+      deletedJobs.remove(j.id);
+      deletedJobs.add(j.id, j);
       jobs.remove(j.id);
-      // Remove applications for those jobs
       let appsToDelete = applications.values().toArray().filter(func(a: Application): Bool { a.jobId == j.id });
       for (ap in appsToDelete.vals()) { applications.remove(ap.id); };
     };
@@ -248,9 +270,16 @@ actor {
 
   public func adminDeletePharmacist(adminToken: Text, pharmacistId: Nat): async { #ok; #err: Text } {
     if (not isAdmin(adminToken)) { return #err("Unauthorized") };
+    // Snapshot to deleted archive before removing
+    switch (pharmacistProfiles.get(pharmacistId)) {
+      case (?p) {
+        deletedPharmacists.remove(pharmacistId);
+        deletedPharmacists.add(pharmacistId, p);
+      };
+      case null {};
+    };
     users.remove(pharmacistId);
     pharmacistProfiles.remove(pharmacistId);
-    // Remove applications by this pharmacist
     let appsToDelete = applications.values().toArray().filter(func(a: Application): Bool { a.pharmacistId == pharmacistId });
     for (ap in appsToDelete.vals()) { applications.remove(ap.id); };
     #ok
@@ -258,12 +287,36 @@ actor {
 
   public func adminDeleteJob(adminToken: Text, jobId: Nat): async { #ok; #err: Text } {
     if (not isAdmin(adminToken)) { return #err("Unauthorized") };
+    // Snapshot to deleted archive before removing
+    switch (jobs.get(jobId)) {
+      case (?j) {
+        deletedJobs.remove(jobId);
+        deletedJobs.add(jobId, j);
+      };
+      case null {};
+    };
     jobs.remove(jobId);
-    // Remove applications for this job
     let appsToDelete = applications.values().toArray().filter(func(a: Application): Bool { a.jobId == jobId });
     for (ap in appsToDelete.vals()) { applications.remove(ap.id); };
     #ok
   };
+
+  // ---- Admin: Fetch Deleted Records ----
+  public func adminGetDeletedEmployers(adminToken: Text): async { #ok: [EmployerWithStatus]; #err: Text } {
+    if (not isAdmin(adminToken)) { return #err("Unauthorized") };
+    #ok(deletedEmployers.values().toArray())
+  };
+
+  public func adminGetDeletedPharmacists(adminToken: Text): async { #ok: [PharmacistProfile]; #err: Text } {
+    if (not isAdmin(adminToken)) { return #err("Unauthorized") };
+    #ok(deletedPharmacists.values().toArray())
+  };
+
+  public func adminGetDeletedJobs(adminToken: Text): async { #ok: [Job]; #err: Text } {
+    if (not isAdmin(adminToken)) { return #err("Unauthorized") };
+    #ok(deletedJobs.values().toArray())
+  };
+
   // ---- Pharmacist Profile ----
   public func savePharmacistProfile(
     token: Text,

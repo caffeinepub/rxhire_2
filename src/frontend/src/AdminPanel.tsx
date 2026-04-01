@@ -17,6 +17,8 @@ import {
   Briefcase,
   Building2,
   CheckCircle,
+  ChevronDown,
+  ChevronUp,
   Clock,
   Loader2,
   LogOut,
@@ -36,7 +38,6 @@ type EmployerFilter = "All" | "Pending" | "Approved" | "Rejected";
 export default function AdminPanel() {
   const { actor } = useActor();
 
-  // Keep-alive: ping backend every 10s to prevent canister sleeping
   useEffect(() => {
     if (!actor) return;
     const ping = () => {
@@ -48,6 +49,7 @@ export default function AdminPanel() {
     const interval = setInterval(ping, 10000);
     return () => clearInterval(interval);
   }, [actor]);
+
   const [adminToken, setAdminToken] = useState<string | null>(() =>
     localStorage.getItem(ADMIN_SESSION_KEY),
   );
@@ -57,19 +59,26 @@ export default function AdminPanel() {
   const [employers, setEmployers] = useState<EmployerWithStatus[]>([]);
   const [pharmacists, setPharmacists] = useState<PharmacistProfile[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [deletedEmployers, setDeletedEmployers] = useState<
+    EmployerWithStatus[]
+  >([]);
+  const [deletedPharmacists, setDeletedPharmacists] = useState<
+    PharmacistProfile[]
+  >([]);
+  const [deletedJobs, setDeletedJobs] = useState<Job[]>([]);
   const [fetching, setFetching] = useState(false);
   const [employerFilter, setEmployerFilter] = useState<EmployerFilter>("All");
+  const [showDeletedEmployers, setShowDeletedEmployers] = useState(false);
+  const [showDeletedPharmacists, setShowDeletedPharmacists] = useState(false);
+  const [showDeletedJobs, setShowDeletedJobs] = useState(false);
 
   const fetchEmployers = useCallback(
     async (token: string) => {
       if (!actor) return;
       try {
         const res = await (actor as any).getAllEmployers(token);
-        if ("ok" in res) {
-          setEmployers(res.ok);
-        } else {
-          toast.error(res.err);
-        }
+        if ("ok" in res) setEmployers(res.ok);
+        else toast.error(res.err);
       } catch {
         toast.error("Failed to load employers");
       }
@@ -82,14 +91,27 @@ export default function AdminPanel() {
       if (!actor) return;
       setFetching(true);
       try {
-        const [empRes, pharmaRes, jobsRes] = await Promise.all([
+        const [
+          empRes,
+          pharmaRes,
+          jobsRes,
+          delEmpRes,
+          delPharmaRes,
+          delJobsRes,
+        ] = await Promise.all([
           (actor as any).getAllEmployers(token),
           (actor as any).getAllPharmacists(),
           (actor as any).getAllJobs(),
+          (actor as any).adminGetDeletedEmployers(token),
+          (actor as any).adminGetDeletedPharmacists(token),
+          (actor as any).adminGetDeletedJobs(token),
         ]);
         if ("ok" in empRes) setEmployers(empRes.ok);
         setPharmacists(pharmaRes as PharmacistProfile[]);
         setJobs(jobsRes as Job[]);
+        if ("ok" in delEmpRes) setDeletedEmployers(delEmpRes.ok);
+        if ("ok" in delPharmaRes) setDeletedPharmacists(delPharmaRes.ok);
+        if ("ok" in delJobsRes) setDeletedJobs(delJobsRes.ok);
       } catch {
         toast.error("Failed to load data");
       } finally {
@@ -136,8 +158,7 @@ export default function AdminPanel() {
         try {
           await attemptLogin();
         } catch (retryErr: any) {
-          const retryMsg = retryErr?.message || String(retryErr);
-          toast.error(`Login failed: ${retryMsg}`);
+          toast.error(`Login failed: ${retryErr?.message || String(retryErr)}`);
         }
       } else {
         toast.error(`Login failed: ${msg}`);
@@ -153,6 +174,9 @@ export default function AdminPanel() {
     setEmployers([]);
     setPharmacists([]);
     setJobs([]);
+    setDeletedEmployers([]);
+    setDeletedPharmacists([]);
+    setDeletedJobs([]);
     window.location.hash = "#admin";
   };
 
@@ -163,9 +187,7 @@ export default function AdminPanel() {
       if ("ok" in res) {
         toast.success("Employer approved");
         fetchEmployers(adminToken);
-      } else {
-        toast.error(res.err);
-      }
+      } else toast.error(res.err);
     } catch {
       toast.error("Failed to approve");
     }
@@ -178,9 +200,7 @@ export default function AdminPanel() {
       if ("ok" in res) {
         toast.success("Employer rejected");
         fetchEmployers(adminToken);
-      } else {
-        toast.error(res.err);
-      }
+      } else toast.error(res.err);
     } catch {
       toast.error("Failed to reject");
     }
@@ -202,9 +222,7 @@ export default function AdminPanel() {
       if ("ok" in res) {
         toast.success("Employer deleted");
         fetchAllData(adminToken);
-      } else {
-        toast.error(res.err);
-      }
+      } else toast.error(res.err);
     } catch {
       toast.error("Failed to delete employer");
     }
@@ -221,9 +239,7 @@ export default function AdminPanel() {
       if ("ok" in res) {
         toast.success("Pharmacist deleted");
         fetchAllData(adminToken);
-      } else {
-        toast.error(res.err);
-      }
+      } else toast.error(res.err);
     } catch {
       toast.error("Failed to delete pharmacist");
     }
@@ -237,9 +253,7 @@ export default function AdminPanel() {
       if ("ok" in res) {
         toast.success("Job deleted");
         fetchAllData(adminToken);
-      } else {
-        toast.error(res.err);
-      }
+      } else toast.error(res.err);
     } catch {
       toast.error("Failed to delete job");
     }
@@ -276,6 +290,49 @@ export default function AdminPanel() {
     if (employerFilter === "Rejected") return "Rejected" in e.approvalStatus;
     return true;
   });
+
+  // --- Removed from Portal Section Component ---
+  const RemovedSection = ({
+    count,
+    show,
+    onToggle,
+    children,
+  }: {
+    count: number;
+    show: boolean;
+    onToggle: () => void;
+    children: React.ReactNode;
+  }) => (
+    <div className="mt-4 border border-red-200 rounded-lg overflow-hidden">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full flex items-center justify-between px-4 py-3 bg-red-50 text-red-700 font-medium text-sm hover:bg-red-100 transition-colors"
+      >
+        <span className="flex items-center gap-2">
+          <Trash2 size={14} />
+          Removed from Portal
+          {count > 0 && (
+            <span className="bg-red-200 text-red-800 text-xs rounded-full px-2 py-0.5">
+              {count}
+            </span>
+          )}
+        </span>
+        {show ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+      </button>
+      {show && (
+        <div className="bg-white">
+          {count === 0 ? (
+            <p className="text-center py-8 text-muted-foreground text-sm">
+              No removed records.
+            </p>
+          ) : (
+            children
+          )}
+        </div>
+      )}
+    </div>
+  );
 
   // --- Login Page ---
   if (!adminToken) {
@@ -341,7 +398,6 @@ export default function AdminPanel() {
   // --- Dashboard ---
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Header */}
       <header className="bg-white border-b shadow-sm px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="p-1.5 rounded-md bg-primary/10">
@@ -392,7 +448,6 @@ export default function AdminPanel() {
               </div>
             </CardContent>
           </Card>
-
           <Card>
             <CardContent className="pt-5 pb-5">
               <div className="flex items-center gap-3">
@@ -414,7 +469,6 @@ export default function AdminPanel() {
               </div>
             </CardContent>
           </Card>
-
           <Card>
             <CardContent className="pt-5 pb-5">
               <div className="flex items-center gap-3">
@@ -436,7 +490,6 @@ export default function AdminPanel() {
               </div>
             </CardContent>
           </Card>
-
           <Card>
             <CardContent className="pt-5 pb-5">
               <div className="flex items-center gap-3">
@@ -604,6 +657,42 @@ export default function AdminPanel() {
                 )}
               </CardContent>
             </Card>
+            {/* Removed Employers */}
+            <RemovedSection
+              count={deletedEmployers.length}
+              show={showDeletedEmployers}
+              onToggle={() => setShowDeletedEmployers((v) => !v)}
+            >
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-red-50/50">
+                    <TableHead>Name</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Company</TableHead>
+                    <TableHead>State</TableHead>
+                    <TableHead>Was Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {deletedEmployers.map((emp) => (
+                    <TableRow
+                      key={emp.userId.toString()}
+                      className="opacity-70"
+                    >
+                      <TableCell className="font-medium">{emp.name}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {emp.email}
+                      </TableCell>
+                      <TableCell>{emp.companyName || "—"}</TableCell>
+                      <TableCell>{emp.state || "—"}</TableCell>
+                      <TableCell>
+                        {getStatusBadge(emp.approvalStatus)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </RemovedSection>
           </TabsContent>
 
           {/* Pharmacists Tab */}
@@ -678,6 +767,49 @@ export default function AdminPanel() {
                 )}
               </CardContent>
             </Card>
+            {/* Removed Pharmacists */}
+            <RemovedSection
+              count={deletedPharmacists.length}
+              show={showDeletedPharmacists}
+              onToggle={() => setShowDeletedPharmacists((v) => !v)}
+            >
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-red-50/50">
+                    <TableHead>Name</TableHead>
+                    <TableHead>Mobile</TableHead>
+                    <TableHead>State</TableHead>
+                    <TableHead>PCI Number</TableHead>
+                    <TableHead>License Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {deletedPharmacists.map((p) => (
+                    <TableRow key={p.userId.toString()} className="opacity-70">
+                      <TableCell className="font-medium">{p.name}</TableCell>
+                      <TableCell>{p.mobileNumber || "—"}</TableCell>
+                      <TableCell>{p.state || "—"}</TableCell>
+                      <TableCell>{p.pciNumber || "—"}</TableCell>
+                      <TableCell>
+                        {p.licenseStatus ? (
+                          <Badge
+                            className={
+                              p.licenseStatus.toLowerCase() === "active"
+                                ? "bg-green-100 text-green-800 hover:bg-green-100"
+                                : "bg-gray-100 text-gray-700 hover:bg-gray-100"
+                            }
+                          >
+                            {p.licenseStatus}
+                          </Badge>
+                        ) : (
+                          "—"
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </RemovedSection>
           </TabsContent>
 
           {/* Jobs Tab */}
@@ -740,6 +872,37 @@ export default function AdminPanel() {
                 )}
               </CardContent>
             </Card>
+            {/* Removed Jobs */}
+            <RemovedSection
+              count={deletedJobs.length}
+              show={showDeletedJobs}
+              onToggle={() => setShowDeletedJobs((v) => !v)}
+            >
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-red-50/50">
+                    <TableHead>Title</TableHead>
+                    <TableHead>Location</TableHead>
+                    <TableHead>Description</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {deletedJobs.map((job) => (
+                    <TableRow key={job.id.toString()} className="opacity-70">
+                      <TableCell className="font-medium">{job.title}</TableCell>
+                      <TableCell>{job.location || "—"}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground max-w-xs truncate">
+                        {job.description
+                          ? job.description.length > 80
+                            ? `${job.description.slice(0, 80)}…`
+                            : job.description
+                          : "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </RemovedSection>
           </TabsContent>
         </Tabs>
       </main>
