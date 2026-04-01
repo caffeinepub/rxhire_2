@@ -121,6 +121,15 @@ export class Backend implements backendInterface {
   async rejectEmployer(adminToken: string, employerId: bigint) {
     return (this.actor as any).rejectEmployer(adminToken, employerId);
   }
+  async adminDeleteEmployer(adminToken: string, employerId: bigint) {
+    return (this.actor as any).adminDeleteEmployer(adminToken, employerId);
+  }
+  async adminDeletePharmacist(adminToken: string, pharmacistId: bigint) {
+    return (this.actor as any).adminDeletePharmacist(adminToken, pharmacistId);
+  }
+  async adminDeleteJob(adminToken: string, jobId: bigint) {
+    return (this.actor as any).adminDeleteJob(adminToken, jobId);
+  }
   async savePharmacistProfile(token: string, name: string, mobileNumber: string, pciNumber: string, state: string, licenseStatus: string, companyName: string, resumeFileId: string) {
     return this.actor.savePharmacistProfile(token, name, mobileNumber, pciNumber, state, licenseStatus, companyName, resumeFileId);
   }

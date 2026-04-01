@@ -1054,6 +1054,7 @@ function BrowseJobsTab({
   const [appliedJobIds, setAppliedJobIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [applying, setApplying] = useState<string | null>(null);
+  const [expandedJobs, setExpandedJobs] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!actor) return;
@@ -1153,9 +1154,37 @@ function BrowseJobsTab({
                   </p>
                 )}
                 <p className="text-sm text-muted-foreground">{job.location}</p>
-                <p className="text-sm text-foreground/80 mt-2 line-clamp-2">
-                  {job.description}
-                </p>
+                {job.description && (
+                  <div className="mt-2">
+                    <p
+                      className={`text-sm text-foreground/80 ${job.description.length > 150 && !expandedJobs.has(job.id.toString()) ? "line-clamp-3" : ""}`}
+                    >
+                      {job.description}
+                    </p>
+                    {job.description.length > 150 && (
+                      <button
+                        type="button"
+                        className="text-xs text-primary underline cursor-pointer mt-1 bg-transparent border-0 p-0"
+                        onClick={() =>
+                          setExpandedJobs((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(job.id.toString())) {
+                              next.delete(job.id.toString());
+                            } else {
+                              next.add(job.id.toString());
+                            }
+                            return next;
+                          })
+                        }
+                        data-ocid={`browse.item.${idx + 1}.toggle`}
+                      >
+                        {expandedJobs.has(job.id.toString())
+                          ? "Show less"
+                          : "Show more"}
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="flex-shrink-0">
                 {appliedJobIds.has(job.id.toString()) ? (

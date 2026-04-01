@@ -229,6 +229,41 @@ actor {
     #ok
   };
 
+
+  public func adminDeleteEmployer(adminToken: Text, employerId: Nat): async { #ok; #err: Text } {
+    if (not isAdmin(adminToken)) { return #err("Unauthorized") };
+    users.remove(employerId);
+    employerProfiles.remove(employerId);
+    employerApprovalStatus.remove(employerId);
+    // Remove jobs posted by this employer
+    let jobsToDelete = jobs.values().toArray().filter(func(j: Job): Bool { j.employerId == employerId });
+    for (j in jobsToDelete.vals()) {
+      jobs.remove(j.id);
+      // Remove applications for those jobs
+      let appsToDelete = applications.values().toArray().filter(func(a: Application): Bool { a.jobId == j.id });
+      for (ap in appsToDelete.vals()) { applications.remove(ap.id); };
+    };
+    #ok
+  };
+
+  public func adminDeletePharmacist(adminToken: Text, pharmacistId: Nat): async { #ok; #err: Text } {
+    if (not isAdmin(adminToken)) { return #err("Unauthorized") };
+    users.remove(pharmacistId);
+    pharmacistProfiles.remove(pharmacistId);
+    // Remove applications by this pharmacist
+    let appsToDelete = applications.values().toArray().filter(func(a: Application): Bool { a.pharmacistId == pharmacistId });
+    for (ap in appsToDelete.vals()) { applications.remove(ap.id); };
+    #ok
+  };
+
+  public func adminDeleteJob(adminToken: Text, jobId: Nat): async { #ok; #err: Text } {
+    if (not isAdmin(adminToken)) { return #err("Unauthorized") };
+    jobs.remove(jobId);
+    // Remove applications for this job
+    let appsToDelete = applications.values().toArray().filter(func(a: Application): Bool { a.jobId == jobId });
+    for (ap in appsToDelete.vals()) { applications.remove(ap.id); };
+    #ok
+  };
   // ---- Pharmacist Profile ----
   public func savePharmacistProfile(
     token: Text,

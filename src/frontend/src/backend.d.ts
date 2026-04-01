@@ -71,6 +71,9 @@ export interface backendInterface {
     getAllEmployers(adminToken: string): Promise<{ ok: EmployerWithStatus[] } | { err: string }>;
     approveEmployer(adminToken: string, employerId: bigint): Promise<{ ok: null } | { err: string }>;
     rejectEmployer(adminToken: string, employerId: bigint): Promise<{ ok: null } | { err: string }>;
+    adminDeleteEmployer(adminToken: string, employerId: bigint): Promise<{ ok: null } | { err: string }>;
+    adminDeletePharmacist(adminToken: string, pharmacistId: bigint): Promise<{ ok: null } | { err: string }>;
+    adminDeleteJob(adminToken: string, jobId: bigint): Promise<{ ok: null } | { err: string }>;
     savePharmacistProfile(
         token: string, name: string, mobileNumber: string,
         pciNumber: string, state: string, licenseStatus: string,

@@ -21,6 +21,7 @@ import {
   Loader2,
   LogOut,
   ShieldCheck,
+  Trash2,
   Users,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -182,6 +183,65 @@ export default function AdminPanel() {
       }
     } catch {
       toast.error("Failed to reject");
+    }
+  };
+
+  const handleDeleteEmployer = async (employerId: bigint) => {
+    if (!actor || !adminToken) return;
+    if (
+      !window.confirm(
+        "Delete this employer? This will also remove their jobs and applications.",
+      )
+    )
+      return;
+    try {
+      const res = await (actor as any).adminDeleteEmployer(
+        adminToken,
+        employerId,
+      );
+      if ("ok" in res) {
+        toast.success("Employer deleted");
+        fetchAllData(adminToken);
+      } else {
+        toast.error(res.err);
+      }
+    } catch {
+      toast.error("Failed to delete employer");
+    }
+  };
+
+  const handleDeletePharmacist = async (pharmacistId: bigint) => {
+    if (!actor || !adminToken) return;
+    if (!window.confirm("Delete this pharmacist profile?")) return;
+    try {
+      const res = await (actor as any).adminDeletePharmacist(
+        adminToken,
+        pharmacistId,
+      );
+      if ("ok" in res) {
+        toast.success("Pharmacist deleted");
+        fetchAllData(adminToken);
+      } else {
+        toast.error(res.err);
+      }
+    } catch {
+      toast.error("Failed to delete pharmacist");
+    }
+  };
+
+  const handleDeleteJob = async (jobId: bigint) => {
+    if (!actor || !adminToken) return;
+    if (!window.confirm("Delete this job?")) return;
+    try {
+      const res = await (actor as any).adminDeleteJob(adminToken, jobId);
+      if ("ok" in res) {
+        toast.success("Job deleted");
+        fetchAllData(adminToken);
+      } else {
+        toast.error(res.err);
+      }
+    } catch {
+      toast.error("Failed to delete job");
     }
   };
 
@@ -526,6 +586,15 @@ export default function AdminPanel() {
                                   Reject
                                 </Button>
                               )}
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => handleDeleteEmployer(emp.userId)}
+                                data-ocid={`employers.delete_button.${idx + 1}`}
+                              >
+                                <Trash2 size={13} className="mr-1" />
+                                Delete
+                              </Button>
                             </div>
                           </TableCell>
                         </TableRow>
@@ -561,6 +630,7 @@ export default function AdminPanel() {
                         <TableHead>State</TableHead>
                         <TableHead>PCI Number</TableHead>
                         <TableHead>License Status</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -589,6 +659,17 @@ export default function AdminPanel() {
                             ) : (
                               "—"
                             )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => handleDeletePharmacist(p.userId)}
+                              data-ocid={`pharmacists.delete_button.${idx + 1}`}
+                            >
+                              <Trash2 size={13} className="mr-1" />
+                              Delete
+                            </Button>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -621,6 +702,7 @@ export default function AdminPanel() {
                         <TableHead>Title</TableHead>
                         <TableHead>Location</TableHead>
                         <TableHead>Description</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -639,6 +721,17 @@ export default function AdminPanel() {
                                 ? `${job.description.slice(0, 80)}…`
                                 : job.description
                               : "—"}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => handleDeleteJob(job.id)}
+                              data-ocid={`jobs.delete_button.${idx + 1}`}
+                            >
+                              <Trash2 size={13} className="mr-1" />
+                              Delete
+                            </Button>
                           </TableCell>
                         </TableRow>
                       ))}
